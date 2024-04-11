@@ -1,0 +1,116 @@
+//@version=4
+study(title="BestBS alert", overlay = true)
+
+// Inputs
+a = input(1,     title = "Key Vaule. 'This changes the sensitivity'")
+c = input(10,    title = "ATR Period")
+h = input(false, title = "Signals from Heikin Ashi Candles")
+ema200 = ema(close, 200)
+ema20 = ema(close, 20)
+ema50 = ema(close, 50)
+xATR  = atr(c)
+nLoss = a * xATR
+
+src = h ? security(heikinashi(syminfo.tickerid),"30", close, lookahead = false) : close
+
+xATRTrailingStop = 0.0
+xATRTrailingStop := iff(src > nz(xATRTrailingStop[1], 0) and src[1] > nz(xATRTrailingStop[1], 0), max(nz(xATRTrailingStop[1]), src - nLoss),
+   iff(src < nz(xATRTrailingStop[1], 0) and src[1] < nz(xATRTrailingStop[1], 0), min(nz(xATRTrailingStop[1]), src + nLoss), 
+   iff(src > nz(xATRTrailingStop[1], 0), src - nLoss, src + nLoss)))
+ 
+pos = 0   
+pos :=	iff(src[1] < nz(xATRTrailingStop[1], 0) and src > nz(xATRTrailingStop[1], 0), 1,
+   iff(src[1] > nz(xATRTrailingStop[1], 0) and src < nz(xATRTrailingStop[1], 0), -1, nz(pos[1], 0))) 
+   
+xcolor = pos == -1 ? color.red: pos == 1 ? color.green : color.blue 
+
+ema   = ema(src,1)
+above = crossover(ema, xATRTrailingStop)
+below = crossover(xATRTrailingStop, ema)
+
+buy  = src > xATRTrailingStop and above   
+sell = src < xATRTrailingStop and below 
+
+plotshape(buy,  title = "B",  text = 'B',  style = shape.labelup,   location = location.belowbar, color= color.green, textcolor = color.white, transp = 0, size = size.tiny)
+plotshape(sell, title = "S", text = 'S', style = shape.labeldown, location = location.abovebar, color= color.red,   textcolor = color.white, transp = 0, size = size.tiny)
+ 
+plot(ema200, color=color.green, title="200 EMA") 
+plot(ema20, color=color.purple, title="20 EMA") 
+plot(ema50, color=color.black, title="50 EMA") 
+
+crossoverb=crossover(ema20,ema50 )
+downb=crossunder(ema20,ema200)
+
+plotshape(crossoverb,  title = "XX",  text = 'XX',  style = shape.labelup,   location = location.belowbar, color= color.rgb(54, 0, 230), textcolor = color.white, transp = 0, size = size.tiny)
+plotshape(downb, title = "XXX", text = 'XXX', style = shape.labeldown, location = location.abovebar, color= color.red,   textcolor = color.white, transp = 0, size = size.tiny)
+ 
+alertcondition(buy,  "BS Long",  "BS Long")
+alertcondition(sell, "BS Short", "BS Short")
+
+daily_cpr = input (title="Number of Daily CPR Back", type= input.integer , defval=1, minval=0) 
+showDailyCPR = input(defval=true, title='Show Dailys CPR')
+todayClose = security( syminfo.tickerid , 'D', close,gaps = barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+todayHigh = security( syminfo.tickerid , 'D', high,gaps = barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+todayLow = security( syminfo.tickerid , 'D', low,gaps = barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+
+new_bar(res) => change(time(res)) != 0
+new_period(condition, src) =>
+    result = 0.0
+    result := condition ? src : result[1]
+    result
+
+pivot = (high + low + close) / 3.0
+bc = (high + low) / 2.0
+tc = (pivot - bc) + pivot
+R1 = (2*pivot) - low
+S1 = (2*pivot) - high
+R2 = pivot + ( high - low)
+S2 = pivot - ( high - low)
+R3 = high
+S3 = low
+R4 = high + (2*(pivot - low))
+S4 = low - (2*(high - pivot ))
+
+//Daily Central Pivot Range
+dpp = security( syminfo.tickerid , 'D', pivot[1], lookahead=barmerge.lookahead_on)
+dbc = security( syminfo.tickerid , 'D', bc[1], lookahead=barmerge.lookahead_on)
+dtc = security( syminfo.tickerid , 'D', tc[1], lookahead=barmerge.lookahead_on)
+
+
+one_day = 1000 * 60 * 60 * 24
+new_day = daily_cpr > 0 and timenow - time < one_day * daily_cpr and new_bar("D")
+dpp_ = new_period(new_day, dpp)
+dtc_ = new_period(new_day, dtc)
+dbc_ = new_period(new_day, dbc)
+
+timeFrames = timeframe.isminutes?timeframe.multiplier:60
+offest_count = ceil(375/timeFrames)
+
+
+plot( showDailyCPR?(timeframe.isintraday ? (dtc_ >= dbc_ ? dtc_ : dbc_) : na):na, title="Daily TC", style= plot.style_circles , color=#2962ff, linewidth=1)
+plot( showDailyCPR?(timeframe.isintraday ? dpp_ : na):na, title="Daily PP", style= plot.style_circles, color=#000000, linewidth=1)
+plot( showDailyCPR?(timeframe.isintraday ? (dtc_ >= dbc_ ? dbc_ : dtc_) : na):na, title="Daily BC", style= plot.style_circles, color=#2962ff, linewidth=1)
+
+lensig = input(14, title="ADX Smoothing", minval=1, maxval=50)
+len = input(14, minval=1, title="DI Length")
+up = change(high)
+down = -change(low)
+plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+trur = rma(tr, len)
+plus = fixnan(100 * rma(plusDM, len) / trur)
+minus = fixnan(100 * rma(minusDM, len) / trur)
+sum = plus + minus
+adx = 100 * rma(abs(plus - minus) / (sum == 0 ? 1 : sum), lensig)
+
+plotshape(crossover(plus, minus), style=shape.triangleup, color=color.new(color.green, 0), size=size.tiny, location=location.belowbar, text="", title="Buycross")
+plotshape(crossover(minus, plus), style=shape.triangledown, color=color.new(color.red, 0), size=size.tiny, text="", title="Sellcross")
+
+
+plotchar(crossover(adx, 25) and minus > plus, size=size.tiny, char="▾", text="Down trend", title="Down Trend", location=location.abovebar, color=color.new(color.red, 0)) 
+plotchar(crossunder(adx, 25) and minus < plus, size=size.tiny, char="▴", text="Up Trend", title="Up Trend", location=location.belowbar, color=color.new(color.green, 0)) 
+ 
+
+
+
+  

@@ -1,0 +1,19 @@
+//@version=5
+indicator("Narrow CPR", overlay=true)
+
+// Input for narrowing factor (percentage)
+narrowFactor = input.float(0.5, title="Narrowing Factor", minval=0.1, maxval=1)
+
+// Calculate CPR levels
+previousHigh = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_on)
+previousLow = request.security(syminfo.tickerid, "D", low[1], lookahead=barmerge.lookahead_on)
+previousClose = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.lookahead_on)
+
+pivot = (previousHigh + previousLow + previousClose) / 3
+rangeHigh = previousHigh - (previousHigh - previousLow) * narrowFactor
+rangeLow = previousLow + (previousHigh - previousLow) * narrowFactor
+
+// Plotting CPR levels
+plot(pivot, color=color.blue, linewidth=2, title="Pivot")
+plot(rangeHigh, color=color.red, linewidth=2, title="Upper Range")
+plot(rangeLow, color=color.green, linewidth=2, title="Lower Range")
